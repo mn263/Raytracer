@@ -4,16 +4,11 @@ import zlib
 
 
 def blend(c1, c2):
-    # # print c1.x
-    # # print c1.y
-    # # print c1.z
-    #
     # c1.x = int(c1.x)
     # c1.y = int(c1.y)
     # c1.z = int(c1.z)
     # for i in range(3):
     #     c2[i] = int(c2[i])
-    # # print c2[3]
     # x = c1.x * (0xFF - c2[3]) + c2[0] * c2[3] >> 8
     # y = c1.y * (0xFF - c2[3]) + c2[1] * c2[3] >> 8
     # z = c1.z * (0xFF - c2[3]) + c2[2] * c2[3] >> 8
@@ -208,7 +203,6 @@ class Triangle(object):
         self.first = first
         self.second = second
         self.third = third
-
         if reflective_color:
             self.reflective = True
             self.diffuse = False
@@ -225,13 +219,6 @@ class Triangle(object):
 
     def is_sphere(self):
         return False
-
-    def get_normal_v(self):
-        v = add_vectors(self.first, vector_mult(self.second, -1))
-        x_v, y_v, z_v = v.get_coords()
-        w = add_vectors(self.third, vector_mult(self.first, -1))
-        x_w, y_w, z_w = w.get_coords()
-        return Vector3((y_v * z_w) - (z_v * y_w), (z_v * x_w) - (x_v * z_w), (z_v * y_w) - (y_v * x_w))
 
 
 class Ray(object):
@@ -325,28 +312,21 @@ def check_for_intersection(ray, shape):
             return Hit(distance, intersecting_point, normal, sphere.reflective_color, sphere.spec_highlight, sphere.phong_const)
 
     elif not shape.is_sphere():
-        # TODO: make hit for triangles
         triangle = shape
         u = add_vectors(triangle.second, vector_mult(triangle.first, -1))
         v = add_vectors(triangle.third, vector_mult(triangle.first, -1))
-        n = u.cross(v)
-        if n.x == 0 and n.y == 0 and n.z == 0:
-            print "THEY ALL EQUAL ZERO"
+        normal = u.cross(v)
+        if normal.x == 0 and normal.y == 0 and normal.z == 0:
             return
         w_o = add_vectors(ray.origin, vector_mult(triangle.second, -1))
-        a = -1 * n.dot(w_o)
-        b = n.dot(ray.direction)
+        a = -1 * normal.dot(w_o)
+        b = normal.dot(ray.direction)
         if abs(b) < 0.0000001:
-            if a == 0:
-                print "In Same Plane"
-            else:
-                print "No Intersect"
             return
 
         r = a / b
-        # if r < 0:
-        #     print "No Intersect 2"
-        #     return
+        if r < 0:
+            return
         intersecting_point = add_vectors(ray.origin, vector_mult(ray.direction, r))
 
         uu = u.dot(u)
@@ -355,21 +335,13 @@ def check_for_intersection(ray, shape):
         w = add_vectors(intersecting_point, vector_mult(triangle.first, -1))
         wu = w.dot(u)
         wv = w.dot(v)
-        # D = uv.cross(uv) - uu.cross(vv)
-        D = (uv * uv) - (uu * vv)
-        S = ((uv * wv) - (vv * wu)) / D
-        if S < 0 or S > 1:
-            # print "Outside Triangle"
+        d = (uv * uv) - (uu * vv)
+        s = ((uv * wv) - (vv * wu)) / d
+        if s < 0 or s > 1:
             return
-        t = ((uv * wu) - (uu * wv)) / D
-        if t < 0 or (S + t) > 1:
-            # print "Outside Triangle 2"
+        t = ((uv * wu) - (uu * wv)) / d
+        if t < 0 or (s + t) > 1:
             return
-
-        # print "Intersected!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-        # print intersecting_point
-        #
-
 
         # get distance
         undr_sqr = pow(ray.origin.x - intersecting_point.x, 2) + pow(ray.origin.y - intersecting_point.y, 2) + pow(ray.origin.z - intersecting_point.z, 2)
@@ -377,27 +349,10 @@ def check_for_intersection(ray, shape):
             undr_sqr *= -1
         distance = pow(undr_sqr, 0.5)
 
-        normal = triangle.get_normal_v()
-
         if triangle.diffuse:
-            return Hit(distance, intersecting_point, normal, triangle.diffuse_color, triangle.spec_highlight, triangle.phong_const)
+            return Hit(distance, intersecting_point, normal, triangle.color, triangle.spec_highlight, triangle.phong_const)
         elif triangle.reflective:
-            return Hit(distance, intersecting_point, normal, triangle.reflective_color, triangle.spec_highlight, triangle.phong_const)
-        # normal = triangle.get_normal_v()
-        # a, b, c, = normal.get_coords()
-        # normal.normalize()
-        # # a, b, c, = normal.get_coords()
-        # x_d, y_d, z_d = ray.direction.get_coords()
-        # x_o, y_o, z_o = ray.origin.get_coords()
-        #
-        # thingy = normal.cross(ray.origin)
-
-
-
-
-        # t = -(ax0 + by0 + cz0 + d) / (axd + byd + czd)
-        # t = -((a * x_o) + (b * y_o) + (c * z_o) + distance ) / ( () + () + () )
-        # return
+            return Hit(distance, intersecting_point, normal, triangle.color, triangle.spec_highlight, triangle.phong_const)
 
 
 def load_light_and_colors(direct_line, color_line, ambient_line, background_line):
@@ -487,8 +442,8 @@ def load_file_objects(input_file, image_size):
 def run(image, image_size):
     camera, light, spheres, triangles, ppm = load_file_objects(image, image_size)
     shapes = []
-    # for sphere in spheres:
-    #     shapes.append(sphere)
+    for sphere in spheres:
+        shapes.append(sphere)
     for triangle in triangles:
         shapes.append(triangle)
 
