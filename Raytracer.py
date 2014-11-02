@@ -132,6 +132,9 @@ class Vector3(object):
         self.set_z(float(self.z / mag))
         return self
 
+    def get_coords(self):
+        return self.x, self.y, self.z
+
 
 class Camera(object):
     def __init__(self, clarity, l_at, l_from, l_up):
@@ -182,9 +185,15 @@ class Sphere(object):
             self.reflective = False
             self.diffuse = True
             self.color = diffuse_color
+
+        self.diffuse_color = diffuse_color
+        self.reflective_color = reflective_color
 #     TODO: write code that uses specular_highlight and phong_const
         self.spec_highlight = spec_highlight
         self.phong_const = phong_const
+
+    def is_sphere(self):
+        return True
 
 
 class Triangle(object):
@@ -197,34 +206,59 @@ class Triangle(object):
         self.spec_highlight = spec_highlight
         self.phong_const = phong_const
 
+    def is_sphere(self):
+        return False
+
 
 class Ray(object):
     def __init__(self, origin, direction):
         self.origin = origin
         self.direction = direction.normalize()
 
-    def hits(self, sphere):
-        # Tests for intersection with sphere in world space.
-        # If no intersection occurs, returns None.
-        # Else return multiplier t to reach closest hit point.
-        # t is a multiplier as follows: self.origin + (self.direction * t).
-        oc = subtract_vectors(sphere.center, self.origin)
-        tca = oc.dot(self.direction)
-        d = self.find_opposite(tca, oc.magnitude)
-        # If the point of closest approach is farther away from the center than
-        # the radius is long, there is no hit.
-        if d > sphere.radius or d < 0:
-            return None
-        # Find the distance from the camera to the collision point:
-        thc = self.find_opposite(d, sphere.radius)
-        t = tca - thc
-        # Find the hit point in world space:
-        world_hit = add_vectors(vector_mult(self.direction, t), self.origin)
-        #Construct the surface normal of the hit point.
-        normal = subtract_vectors(world_hit, sphere.center).normalize()
-        # Build the hit object to return.
-        result = Hit(tca - thc, world_hit, normal, sphere.color)
-        return result
+    def hits(self, shape):
+        if shape.is_sphere():
+            sphere = shape
+            x_d, y_d, z_d = self.direction.get_coords()
+            x_o, y_o, z_o = self.origin.get_coords()
+            x_c, y_c, z_c = sphere.center.get_coords()
+
+            b = 2 * ((x_d * x_o) - (x_d * x_c) + (y_d * y_o) - (y_d * y_c) + (z_d * z_o) - (z_d * z_c))
+            c = (
+                pow(x_d, 2) + pow(x_c, 2) - (2 * x_o * x_c) +
+                pow(y_d, 2) + pow(y_c, 2) - (2 * y_o * y_c) +
+                pow(z_d, 2) + pow(z_c, 2) - (2 * z_o * z_c) - pow(sphere.radius, 2))
+            discriminant = pow(b, 2) - (4 * c)
+
+            t = None
+            if discriminant == 0:
+                t = (-0.5 * b)
+            elif discriminant < 0:
+                return  # missed
+            elif discriminant > 0:
+                t0 = (-b - pow(discriminant, 0.5))/2
+                t1 = (-b + pow(discriminant, 0.5))/2
+                if t0 < 0 < t1:
+                    t = t1
+                elif t0 > 0 and t1 > 0:
+                    t = t1
+
+            intersecting_point = add_vectors(self.origin, vector_mult(self.direction, t))
+            x_i, y_i, z_i = intersecting_point.get_coords()
+            normal = vector_mult(add_vectors(intersecting_point, vector_mult(sphere.center, -1)), (1/sphere.radius))
+            undr_sqr = pow(x_o - x_i, 2) + pow(y_o - y_i, 2) + pow(z_o - z_i, 2)
+            if undr_sqr < 0:
+                undr_sqr *= -1
+            distance = pow(undr_sqr, 0.5)
+
+            if sphere.diffuse:
+                return Hit(distance, intersecting_point, normal, sphere.diffuse_color, sphere.spec_highlight, sphere.phong_const)
+            elif sphere.reflective:
+                return Hit(distance, intersecting_point, normal, sphere.reflective_color, sphere.spec_highlight, sphere.phong_const)
+
+        elif not shape.is_sphere():
+            # TODO: make hit for triangles
+            triangle = shape
+            return
 
     def find_opposite(self, adj, hyp):
         # Use the pythagorean theorem to find the length
@@ -233,12 +267,14 @@ class Ray(object):
 
 
 class Hit(object):  # A simple object representing a ray hit with a sphere.
-    def __init__(self, dist, world_hit, normal, obj_color):
+    def __init__(self, dist, world_hit, normal, obj_color, spec_highlight, phong_const):
         # Dist should be a scalar, and normal should be a vector object.
         self.dist = dist
         self.world_hit = world_hit
         self.normal = normal
         self.obj_color = obj_color
+        self.spec_highlight = spec_highlight
+        self.phong_const = phong_const
 
 
 class Light(object):
@@ -254,8 +290,8 @@ def create_ray(camera, x_pixel, y_pixel):
     result = add_vectors(Vector3(camera.w.x * -camera.normal, camera.w.y * -camera.normal, camera.w.z * -camera.normal),
                          Vector3(camera.u.x * x_cam, camera.u.y * x_cam, camera.u.z * x_cam))
 
-    result2 = add_vectors(result, Vector3(camera.v.x * y_cam, camera.v.y * y_cam, camera.v.z * y_cam))
-    return Ray(camera.look_from, result2)
+    direction = add_vectors(result, Vector3(camera.v.x * y_cam, camera.v.y * y_cam, camera.v.z * y_cam))
+    return Ray(camera.look_from, direction)
 
 
 def load_camera(clarity, at_line, from_line, up_line, angle_line):
@@ -267,7 +303,7 @@ def load_camera(clarity, at_line, from_line, up_line, angle_line):
     camera = Camera(clarity, look_at, look_from, look_up)
     # TODO: figure out what is wrong with the angle (it works better with 80)
     camera.angle = float(angle_line[1])
-    camera.angle = 80
+    camera.angle = 61
     camera.look_at(look_at)
     camera.calc()
     return camera
@@ -299,9 +335,9 @@ def load_spheres(sphere_lines):
     return spheres
 
 
-def load_triangles(traingle_lines):
+def load_triangles(triangle_lines):
     triangles = []
-    for line in traingle_lines:
+    for line in triangle_lines:
         first = Vector3(float(line[1]), float(line[2]), float(line[3]))
         second = Vector3(float(line[5]), float(line[6]), float(line[7]))
         third = Vector3(float(line[9]), float(line[10]), float(line[11]))
@@ -326,16 +362,15 @@ def diffuse(hit, light):
     return new_color
 
 
-def load_file_objects(input, image_size):
-    f = open(input, 'r')
+def load_file_objects(input_file, image_size):
+    f = open(input_file, 'r')
     lines = f.readlines()
-
     camera = load_camera(image_size,
                          lines[0].strip().split(" "),
                          lines[1].strip().split(" "),
                          lines[2].strip().split(" "),
                          lines[3].strip().split(" "))
-
+    # TODO: figure out how to use ambient light
     dir_to_light, light_color, ambient_light, background_color = load_light_and_colors(
         lines[4].strip().split(" ")[:4],
         lines[4].strip().split(" ")[4:],
@@ -343,8 +378,6 @@ def load_file_objects(input, image_size):
         lines[6].strip().split(" ")
     )
     light = Light(dir_to_light, light_color, 1)
-
-    # TODO: figure out how to use ambient light
 
     sphere_lines = []
     triangle_lines = []
@@ -354,25 +387,27 @@ def load_file_objects(input, image_size):
             sphere_lines.append(line)
         elif line[0] == "Triangle":
             triangle_lines.append(line)
-
     spheres = load_spheres(sphere_lines)
     triangles = load_triangles(triangle_lines)
-
     png = PNG(camera.clarity, camera.clarity, background_color)
-
     return camera, light, spheres, triangles, png
 
 
 def run(image, image_size):
     camera, light, spheres, triangles, ppm = load_file_objects(image, image_size)
+    shapes = []
+    for sphere in spheres:
+        shapes.append(sphere)
+    # for triangle in triangles:
+    #     shapes.append(triangle)
 
-    # Draw shapes.
-    for i in xrange(0, camera.width - 1):
-        for j in xrange(0, camera.height - 1):
-            ray = create_ray(camera, i, camera.height - j)
-            # This is to tell what's in the front:
-            front = None
-            for s in spheres:
+    for row_index in xrange(0, camera.width - 1):
+        # Run across all pixels in the row
+        for column_index in xrange(0, camera.height - 1):
+            # draw save pixel at row 'i' and column 'j'
+            ray = create_ray(camera, row_index, camera.height - column_index)
+            front = None  # we only want to draw the shape that is hit first (closest)
+            for s in shapes:
                 hit = ray.hits(s)
                 if hit:
                     if not front:
@@ -380,11 +415,11 @@ def run(image, image_size):
                     elif hit.dist < front.dist:
                         front = hit
             if front:  # Do some shading:
-                ppm.point(i, j, diffuse(front, light))
+                ppm.point(row_index, column_index, diffuse(front, light))
 
     # Create PNG
     f = open("outfile.png", "wb")
     f.write(ppm.dump())
     f.close()
 
-run(image="diffuse.rayTracing", image_size=200)
+run(image="diffuse.rayTracing", image_size=513)
