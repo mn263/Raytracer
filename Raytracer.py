@@ -164,10 +164,9 @@ class Camera(object):
         self.look_from = l_from
         self.look_up = l_up
 # ###### DON'T UNDERSTAND######################################################
-        self.e = Vector3(0, 0, 0)
         self.g = Vector3(0, 0, -1)
         self.t = Vector3(0, 100, 0)
-        self.n = 2
+        self.normal = 2
         self.angle = 90
         self.width = clarity
         self.height = clarity
@@ -187,14 +186,13 @@ class Camera(object):
         self.w = Vector3(self.g.x * -1, self.g.y * -1, self.g.z * -1)
         self.u = self.t.cross(self.w).normalize()
         self.v = self.w.cross(self.u)
-        self.top = abs(self.n) * math.tan(math.radians(self.angle / 2))
+        self.top = abs(self.normal) * math.tan(math.radians(self.angle / 2))
         self.bottom = -self.top
         self.right = self.top * self.width / self.height
         self.left = -self.right
 
-    def look_at(self, x, y, z):
-        point = Vector3(x, y, z)
-        direction = subtract_vectors(point, self.e)
+    def look_at(self, point):
+        direction = subtract_vectors(point, self.look_from)
         self.g = Vector3(direction.x, direction.y, direction.z)
         self.g.normalize()
         self.calc()
@@ -284,32 +282,32 @@ class Light(object):
 def create_ray(camera, x_pixel, y_pixel):
     x_cam = camera.left + ((camera.right - camera.left) * (x_pixel + 0.5) / camera.width)
     y_cam = camera.bottom + ((camera.top - camera.bottom) * (y_pixel + 0.5) / camera.height)
-    result = add_vectors(Vector3(camera.w.x * -camera.n, camera.w.y * -camera.n, camera.w.z * -camera.n),
+    result = add_vectors(Vector3(camera.w.x * -camera.normal, camera.w.y * -camera.normal, camera.w.z * -camera.normal),
                          Vector3(camera.u.x * x_cam, camera.u.y * x_cam, camera.u.z * x_cam))
 
     result2 = add_vectors(result, Vector3(camera.v.x * y_cam, camera.v.y * y_cam, camera.v.z * y_cam))
-    # result.normalize()
-    return Ray(camera.e, result2)
+    return Ray(camera.look_from, result2)
 
 
-def load_camera(at_line, from_line, up_line):
+def load_camera(at_line, from_line, up_line, angle_line):
 
     look_at = Vector3(float(at_line[1]), float(at_line[2]), float(at_line[3]))
     look_from = Vector3(float(from_line[1]), float(from_line[2]), float(from_line[3]))
     look_up = Vector3(float(up_line[1]), float(up_line[2]), float(up_line[3]))
     clarity = 200  # whatever we want
-    return Camera(clarity, look_at, look_from, look_up)
+
+    camera = Camera(clarity, look_at, look_from, look_up)
+    camera.angle = float(angle_line[1])
+    camera.look_at(look_at)
+    camera.calc()
+    return camera
 
 
-def load_light_and_colors(input_file):
-    dir_to_light = Vector3(0, 1, 0)
-    light_color = [1, 1, 1]
-    ambient_light = Vector3(0, 0, 0)
-    background_color = Vector3(0.2, 0.2, 0.2)
-
-    # TODO: remove next two lines
-    dir_to_light = Vector3(0, 55, -4)
-    light_color = [255, 255, 255]
+def load_light_and_colors(direct_line, color_line, ambient_line, background_line):
+    dir_to_light = Vector3(float(direct_line[1]), float(direct_line[2]), float(direct_line[3]))
+    light_color = [float(color_line[1]), float(color_line[2]), float(color_line[3])]
+    ambient_light = Vector3(float(ambient_line[1]), float(ambient_line[2]), float(ambient_line[3]))
+    background_color = Vector3(float(background_line[1]), float(background_line[2]), float(background_line[3]))
     return dir_to_light, light_color, ambient_light, background_color
 
 
@@ -318,21 +316,19 @@ def load_field_of_view(input_file):
     return field_of_view
 
 
-def load_spheres(input_file):
+def load_spheres(sphere_lines):
+    # center, radius, reflective_color, diffuse_color
     spheres = []
-    center = Vector3(0, 0.3, 0)
-    radius = 0.2
-    reflective = Vector3(0.75, 0.75, 0.75)
-    diffuse_color = None
-    # sphere1 = Sphere(center, radius, reflective, diffuse_color)
-    # spheres.append(sphere1)
-
-    # TODO: remove this later on
-    spheres = [
-        Sphere(Vector3(0, 0, -4), 1, None, [255, 0, 0, 255]),
-        Sphere(Vector3(-2.5, 0, -4), 1, None, [0, 255, 0, 255]),
-        Sphere(Vector3(-1, 0.5, -3), 1, None, [100, 100, 100, 255]),
-        Sphere(Vector3(2.5, -0.7, -4), 1, None, [0, 0, 255, 255])]
+    for line in sphere_lines:
+        center = Vector3(float(line[2]), float(line[3]), float(line[4]))
+        radius = float(line[6])
+        if line[8] == "Diffuse":
+            reflective_color = None
+            diffuse_color = [float(line[9])*255, float(line[10])*255, float(line[11])*255, 255]
+        else:
+            reflective_color = [float(line[9])*255, float(line[10])*255, float(line[11])*255, 255]
+            diffuse_color = None
+        spheres.append(Sphere(center, radius, reflective_color, diffuse_color))
     return spheres
 
 
@@ -379,14 +375,28 @@ def load_file_objects(input):
 
     camera = load_camera(lines[0].strip().split(" "),
                          lines[1].strip().split(" "),
-                         lines[2].strip().split(" "))
+                         lines[2].strip().split(" "),
+                         lines[3].strip().split(" "))
 
-    dir_to_light, light_color, ambient_light, background_color = load_light_and_colors(input)
+    dir_to_light, light_color, ambient_light, background_color = load_light_and_colors(
+        lines[4].strip().split(" ")[:4],
+        lines[4].strip().split(" ")[4:],
+        lines[5].strip().split(" "),
+        lines[6].strip().split(" ")
+    )
     light = Light(dir_to_light, light_color, 1)
 
-    spheres = load_spheres(input)
+    sphere_lines = []
+    triangle_lines = []
+    for index in range(7, len(lines)):
+        line = lines[index].strip().split(" ")
+        if line[0] == "Sphere":
+            sphere_lines.append(line)
+        elif line[0] == "Triangle":
+            triangle_lines.append(line)
 
-    triangles = load_triangles(input)
+    spheres = load_spheres(sphere_lines)
+    triangles = load_triangles(triangle_lines)
 
     return camera, light, spheres, triangles
 
@@ -394,16 +404,6 @@ def load_file_objects(input):
 def run():
     input = "diffuse.rayTracing"
     camera, light, spheres, triangles = load_file_objects(input)
-    camera.e = Vector3(-2, 5, -1)
-    camera.look_at(0, 0, -4)
-    camera.angle = 60
-    camera.calc()
-
-    # triangles = load_triangles(input)
-    # spheres = load_spheres(input)
-
-    # dir_to_light, light_color, ambient_light, background_color = load_light_and_colors(input)
-    # light = Light(dir_to_light, light_color, 1)
 
     png = PNG(camera.clarity, camera.clarity, [255, 255, 255], [34, 34, 34, 255])
     # Draw background.
@@ -412,7 +412,6 @@ def run():
     # Draw shapes.
     for i in xrange(0, camera.width - 1):
         for j in xrange(0, camera.height - 1):
-            # ray = c.ray(i, c.height - j)
             ray = create_ray(camera, i, camera.height - j)
             # This is to tell what's in the front:
             front = None
