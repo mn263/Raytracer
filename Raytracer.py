@@ -18,7 +18,6 @@ def blend(c1, c2):
     # y = c1.y * (0xFF - c2[3]) + c2[1] * c2[3] >> 8
     # z = c1.z * (0xFF - c2[3]) + c2[2] * c2[3] >> 8
     # return [x, y, z]
-    # TODO: re-write in a way I understand
     return [c1[i] * (0xFF - c2[3]) + c2[i] * c2[3] >> 8 for i in range(3)]
 
 
@@ -46,42 +45,28 @@ def subtract_vectors(v1, v2):
 
 
 class PNG(object):
-    def __init__(self, height, width, background_color, color):
+    def __init__(self, height, width, background_color):
         self.height = height
         self.width = width
-        # TODO: figure what bgcolor and color really are
-        self.background_color = background_color
-        self.color = color
-        pixel = self.background_color
+        self.background_color = [int(x) for x in background_color]
+        # create canvas
         self.canvas = []
         for row in range(height):
             row = []
             for column in range(width):
-                row.append(pixel)
+                row.append(self.background_color)
             self.canvas.append(row)
-
-####### DON'T UNDERSTAND######################################################
+        # initially fill canvas with background color
+        for x in range(0, self.width):
+            for y in range(0, self.width):
+                self.point(x, y, self.background_color)
 
     def point(self, x, y, color=None):
         if x < 0 or y < 0 or x > self.width - 1 or y > self.height - 1:
             return
         if not color:
-            color = self.color
+            color = self.background_color
         self.canvas[y][x] = blend(self.canvas[y][x], color)
-
-    def _rect_helper(self, x0, y0, x1, y1):
-        x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
-        if x0 > x1:
-            x0, x1 = x1, x0
-        if y0 > y1:
-            y0, y1 = y1, y0
-        return [x0, y0, x1, y1]
-
-    def filled_rectangle(self, x0, y0, x1, y1):
-        x0, y0, x1, y1 = self._rect_helper(x0, y0, x1, y1)
-        for x in range(x0, x1 + 1):
-            for y in range(y0, y1 + 1):
-                self.point(x, y, self.color)
 
     def dump(self):
         raw_list = []
@@ -91,28 +76,20 @@ class PNG(object):
                 raw_list.append(struct.pack("!3B", *self.canvas[y][x]))
         raw_data = ''.join(raw_list)
 
-        # 8-bit image represented as RGB tuples
-        # simple transparency, alpha is pure white
         return struct.pack("8B", 137, 80, 78, 71, 13, 10, 26, 10) + self.pack_chunk('IHDR', struct.pack("!2I5B", self.width, self.height, 8, 2, 0, 0, 0)) + self.pack_chunk('tRNS', struct.pack("!6B", 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF)) + self.pack_chunk('IDAT', zlib.compress(raw_data, 9)) + self.pack_chunk('IEND', '')
 
     def pack_chunk(self, tag, data):
         to_check = tag + data
         return struct.pack("!I", len(data)) + to_check + struct.pack("!I", zlib.crc32(to_check) & 0xFFFFFFFF)
-########################################################################################
 
 
 class Vector3(object):
-    def __init__(self, x, y, z, h=None):
+    def __init__(self, x, y, z):
         self.x = x
         self.y = y
         self.z = z
-        if h:
-            print "there was an h"
-            self.magnitude = math.sqrt(sum([math.pow(x, 2), math.pow(y, 2), math.pow(z, 2), math.pow(h, 2)]))
-            self.data = [x, y, z, h]
-        else:
-            self.magnitude = math.sqrt(sum([math.pow(x, 2), math.pow(y, 2), math.pow(z, 2)]))
-            self.data = [x, y, z]
+        self.magnitude = math.sqrt(sum([math.pow(x, 2), math.pow(y, 2), math.pow(z, 2)]))
+        self.data = [x, y, z]
         self.setup()
 
     def setup(self):
@@ -154,7 +131,6 @@ class Vector3(object):
         self.set_y(float(self.y / mag))
         self.set_z(float(self.z / mag))
         return self
-########################################################################################
 
 
 class Camera(object):
@@ -163,7 +139,6 @@ class Camera(object):
         self.look_at_direction = l_at
         self.look_from = l_from
         self.look_up = l_up
-# ###### DON'T UNDERSTAND######################################################
         self.g = Vector3(0, 0, -1)
         self.t = Vector3(0, 100, 0)
         self.normal = 2
@@ -179,9 +154,6 @@ class Camera(object):
         self.right = None
         self.calc()
 
-########################################################################################
-
-####### DON'T UNDERSTAND######################################################
     def calc(self):
         self.w = Vector3(self.g.x * -1, self.g.y * -1, self.g.z * -1)
         self.u = self.t.cross(self.w).normalize()
@@ -196,11 +168,10 @@ class Camera(object):
         self.g = Vector3(direction.x, direction.y, direction.z)
         self.g.normalize()
         self.calc()
-########################################################################################
 
 
 class Sphere(object):
-    def __init__(self, center, radius, reflective_color, diffuse_color):
+    def __init__(self, center, radius, reflective_color, diffuse_color, spec_highlight, phong_const):
         self.center = center
         self.radius = radius
         if reflective_color:
@@ -211,6 +182,9 @@ class Sphere(object):
             self.reflective = False
             self.diffuse = True
             self.color = diffuse_color
+#     TODO: write code that uses specular_highlight and phong_const
+        self.spec_highlight = spec_highlight
+        self.phong_const = phong_const
 
 
 class Triangle(object):
@@ -224,7 +198,6 @@ class Triangle(object):
         self.phong_const = phong_const
 
 
-####### DON'T UNDERSTAND######################################################
 class Ray(object):
     def __init__(self, origin, direction):
         self.origin = origin
@@ -258,10 +231,7 @@ class Ray(object):
         # of the opposite side.
         return math.sqrt(math.pow(hyp, 2) - math.pow(adj, 2))
 
-########################################################################################
 
-
-####### DON'T UNDERSTAND######################################################
 class Hit(object):  # A simple object representing a ray hit with a sphere.
     def __init__(self, dist, world_hit, normal, obj_color):
         # Dist should be a scalar, and normal should be a vector object.
@@ -269,7 +239,6 @@ class Hit(object):  # A simple object representing a ray hit with a sphere.
         self.world_hit = world_hit
         self.normal = normal
         self.obj_color = obj_color
-########################################################################################
 
 
 class Light(object):
@@ -289,15 +258,16 @@ def create_ray(camera, x_pixel, y_pixel):
     return Ray(camera.look_from, result2)
 
 
-def load_camera(at_line, from_line, up_line, angle_line):
+def load_camera(clarity, at_line, from_line, up_line, angle_line):
 
     look_at = Vector3(float(at_line[1]), float(at_line[2]), float(at_line[3]))
     look_from = Vector3(float(from_line[1]), float(from_line[2]), float(from_line[3]))
     look_up = Vector3(float(up_line[1]), float(up_line[2]), float(up_line[3]))
-    clarity = 200  # whatever we want
 
     camera = Camera(clarity, look_at, look_from, look_up)
+    # TODO: figure out what is wrong with the angle (it works better with 80)
     camera.angle = float(angle_line[1])
+    camera.angle = 80
     camera.look_at(look_at)
     camera.calc()
     return camera
@@ -307,13 +277,8 @@ def load_light_and_colors(direct_line, color_line, ambient_line, background_line
     dir_to_light = Vector3(float(direct_line[1]), float(direct_line[2]), float(direct_line[3]))
     light_color = [float(color_line[1]), float(color_line[2]), float(color_line[3])]
     ambient_light = Vector3(float(ambient_line[1]), float(ambient_line[2]), float(ambient_line[3]))
-    background_color = Vector3(float(background_line[1]), float(background_line[2]), float(background_line[3]))
+    background_color = [float(background_line[1])*255, float(background_line[2])*255, float(background_line[3])*255, 255]
     return dir_to_light, light_color, ambient_light, background_color
-
-
-def load_field_of_view(input_file):
-    field_of_view = 55
-    return field_of_view
 
 
 def load_spheres(sphere_lines):
@@ -328,52 +293,45 @@ def load_spheres(sphere_lines):
         else:
             reflective_color = [float(line[9])*255, float(line[10])*255, float(line[11])*255, 255]
             diffuse_color = None
-        spheres.append(Sphere(center, radius, reflective_color, diffuse_color))
+        spec_highlight = Vector3(float(line[13]), float(line[14]), float(line[15]))
+        phong_const = float(line[17])
+        spheres.append(Sphere(center, radius, reflective_color, diffuse_color, spec_highlight, phong_const))
     return spheres
 
 
-def load_triangles(input_file):
+def load_triangles(traingle_lines):
     triangles = []
-    first = Vector3(0, -0.5, 0.5)
-    second = Vector3(1, 0.5, 0)
-    third = Vector3(0, -0.5, -0.5)
-    reflective = None
-    diffuse_color = Vector3(0, 0, 1)
-    specular_highlight = Vector3(1, 1, 1)
-    phong_constant = 4
-    triangle1 = Triangle(first, second, third, reflective, diffuse_color, specular_highlight, phong_constant)
-    triangles.append(triangle1)
-
-    first = Vector3(0, -0.5, 0.5)
-    second = Vector3(0, -0.5, -0.5)
-    third = Vector3(-1, 0.5, 0)
-    reflective = None
-    diffuse_color = Vector3(1, 1, 0)
-    specular_highlight = Vector3(1, 1, 1)
-    phong_constant = 4
-    triangle2 = Triangle(first, second, third, reflective, diffuse_color, specular_highlight, phong_constant)
-    triangles.append(triangle2)
-
+    for line in traingle_lines:
+        first = Vector3(float(line[1]), float(line[2]), float(line[3]))
+        second = Vector3(float(line[5]), float(line[6]), float(line[7]))
+        third = Vector3(float(line[9]), float(line[10]), float(line[11]))
+        if line[13] == "Diffuse":
+            reflective_color = None
+            diffuse_color = [float(line[14])*255, float(line[15])*255, float(line[16])*255, 255]
+        else:
+            reflective_color = [float(line[14])*255, float(line[15])*255, float(line[16])*255, 255]
+            diffuse_color = None
+        spec_highlight = Vector3(float(line[18]), float(line[19]), float(line[20]))
+        phong_const = float(line[22])
+        triangles.append(Triangle(first, second, third, reflective_color, diffuse_color, spec_highlight, phong_const))
     return triangles
 
 
-####### DON'T UNDERSTAND######################################################
 def diffuse(hit, light):
-    # TODO: replace with my diffuse
     color = hit.obj_color
     new_color = [0, 0, 0, 255]
     for i in xrange(3):
         brightness = light.intensity * hit.normal.dot(subtract_vectors(light.position, hit.world_hit).normalize())
         new_color[i] = new_color[i] + max(0, int(color[i] * brightness))
     return new_color
-########################################################################################
 
 
-def load_file_objects(input):
+def load_file_objects(input, image_size):
     f = open(input, 'r')
     lines = f.readlines()
 
-    camera = load_camera(lines[0].strip().split(" "),
+    camera = load_camera(image_size,
+                         lines[0].strip().split(" "),
                          lines[1].strip().split(" "),
                          lines[2].strip().split(" "),
                          lines[3].strip().split(" "))
@@ -385,6 +343,8 @@ def load_file_objects(input):
         lines[6].strip().split(" ")
     )
     light = Light(dir_to_light, light_color, 1)
+
+    # TODO: figure out how to use ambient light
 
     sphere_lines = []
     triangle_lines = []
@@ -398,16 +358,13 @@ def load_file_objects(input):
     spheres = load_spheres(sphere_lines)
     triangles = load_triangles(triangle_lines)
 
-    return camera, light, spheres, triangles
+    png = PNG(camera.clarity, camera.clarity, background_color)
+
+    return camera, light, spheres, triangles, png
 
 
-def run():
-    input = "diffuse.rayTracing"
-    camera, light, spheres, triangles = load_file_objects(input)
-
-    png = PNG(camera.clarity, camera.clarity, [255, 255, 255], [34, 34, 34, 255])
-    # Draw background.
-    png.filled_rectangle(0, 0, camera.width - 1, camera.height - 1)
+def run(image, image_size):
+    camera, light, spheres, triangles, ppm = load_file_objects(image, image_size)
 
     # Draw shapes.
     for i in xrange(0, camera.width - 1):
@@ -423,11 +380,11 @@ def run():
                     elif hit.dist < front.dist:
                         front = hit
             if front:  # Do some shading:
-                png.point(i, j, diffuse(front, light))
+                ppm.point(i, j, diffuse(front, light))
 
     # Create PNG
     f = open("outfile.png", "wb")
-    f.write(png.dump())
+    f.write(ppm.dump())
     f.close()
 
-run()
+run(image="diffuse.rayTracing", image_size=200)
