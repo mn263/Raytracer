@@ -360,38 +360,44 @@ def load_triangles(triangle_lines):
     return triangles
 
 
-def check_if_in_shadow(intersection, light, camera, shapes):
-
-    # TODO: implement this check
+def check_if_in_shadow(intersection, light, shapes):
+    direction = subtract_vectors(light.position, intersection.intersection_point)
+    ray = Ray(intersection.intersection_point, direction)
+    for shape in shapes:
+        inter = check_for_intersection(ray, shape)
+        if inter:
+            difference = subtract_vectors(intersection.intersection_point, inter.intersection_point)
+            difference = abs(difference.x) + abs(difference.y) + abs(difference.z)
+            if difference > 0.00000000001:
+                return True
     return False
 
 
 def calculate_pixel_color(intersection, light, camera, shapes):
-    is_in_shadow = check_if_in_shadow(intersection, light, camera, shapes)
+    is_in_shadow = check_if_in_shadow(intersection, light, shapes)
     if is_in_shadow:
-        # TODO: change function if is_in_shadow
-        da_color = Vector3(0, 0, 0)
+        c_l = Vector3(0, 0, 0)
     else:
-        # ###########
-        c_r = Vector3(intersection.shape.diffuse_color[0], intersection.shape.diffuse_color[1], intersection.shape.diffuse_color[2])
-        c_a = light.ambient
         c_l = Vector3(light.color[0], light.color[1], light.color[2])
-        ambient = multiply_vectors(c_r, c_a)
-        direct = multiply_vectors(c_r, vector_mult(c_l, max(0, intersection.normal.dot(light.position))))
+    # ###########
+    c_r = Vector3(intersection.shape.diffuse_color[0], intersection.shape.diffuse_color[1], intersection.shape.diffuse_color[2])
+    c_a = light.ambient
+    ambient = multiply_vectors(c_r, c_a)
+    direct = multiply_vectors(c_r, vector_mult(c_l, max(0, intersection.normal.dot(light.position))))
 
-        diffuse_term = add_vectors(ambient, direct)
-        # ###########
-        c_p = intersection.shape.spec_highlight
-        specular = multiply_vectors(c_l, c_p)
-        reflective = vector_mult(intersection.normal, 2)
-        reflective = vector_mult(reflective, intersection.normal.dot(light.position))
-        reflective = subtract_vectors(reflective, light.position)
+    diffuse_term = add_vectors(ambient, direct)
+    # ###########
+    c_p = intersection.shape.spec_highlight
+    specular = multiply_vectors(c_l, c_p)
+    reflective = vector_mult(intersection.normal, 2)
+    reflective = vector_mult(reflective, intersection.normal.dot(light.position))
+    reflective = subtract_vectors(reflective, light.position)
 
-        eye = subtract_vectors(camera.look_from, intersection.intersection_point)
-        phong = max(0, pow(eye.dot(reflective), intersection.shape.phong_const))
-        phong_term = vector_mult(specular, phong)
-        # ############
-        da_color = add_vectors(diffuse_term, phong_term)
+    eye = subtract_vectors(camera.look_from, intersection.intersection_point)
+    phong = max(0, pow(eye.dot(reflective), intersection.shape.phong_const))
+    phong_term = vector_mult(specular, phong)
+    # ############
+    da_color = add_vectors(diffuse_term, phong_term)
 
     if int(da_color.x) > 255:
         da_color.x = 255
@@ -463,4 +469,4 @@ def run(image, image_size):
     f.write(ppm.output())
     f.close()
 
-run(image="diff.rayTracing", image_size=205)
+run(image="diffuse.rayTracing", image_size=205)
