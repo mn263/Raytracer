@@ -135,7 +135,7 @@ class Vector3(object):
 
 
 class Camera(object):
-    def __init__(self, clarity, l_at, l_from, l_up):
+    def __init__(self, clarity, l_at, l_from, l_up, angle):
         self.clarity = clarity
         self.look_at_direction = l_at
         self.look_from = l_from
@@ -144,7 +144,7 @@ class Camera(object):
         self.t = Vector3(0, 100, 0)
         # TODO: fix some of the variables in camera
         self.normal = 2
-        self.angle = 90
+        self.angle = angle
         self.width = clarity
         self.height = clarity
         self.w = None
@@ -154,9 +154,9 @@ class Camera(object):
         self.bottom = None
         self.left = None
         self.right = None
-        self.calc()
+        self.calibrate()
 
-    def calc(self):
+    def calibrate(self):
         self.w = Vector3(self.g.x * -1, self.g.y * -1, self.g.z * -1)
         self.u = self.t.cross(self.w).normalize()
         self.v = self.w.cross(self.u)
@@ -169,7 +169,7 @@ class Camera(object):
         direction = subtract_vectors(point, self.look_from)
         self.g = Vector3(direction.x, direction.y, direction.z)
         self.g.normalize()
-        self.calc()
+        self.calibrate()
 
 
 class Sphere(object):
@@ -195,7 +195,7 @@ class Sphere(object):
         return True
 
     def get_normal_v(self, intersecting_point):
-        return vector_mult(add_vectors(intersecting_point, vector_mult(self.center, -1)), (1/self.radius))
+        return vector_mult(subtract_vectors(intersecting_point, self.center), (1/self.radius))
 
 
 class Triangle(object):
@@ -228,21 +228,24 @@ class Ray(object):
 
 
 class Hit(object):  # A simple object representing a ray hit with a sphere.
-    def __init__(self, dist, world_hit, normal, obj_color, spec_highlight, phong_const):
+    def __init__(self, dist, intersection_point, normal, shape):
         # Dist should be a scalar, and normal should be a vector object.
         self.dist = dist
-        self.world_hit = world_hit
+        self.intersection_point = intersection_point
         self.normal = normal
-        self.obj_color = obj_color
-        self.spec_highlight = spec_highlight
-        self.phong_const = phong_const
+
+        self.shape = shape
+        # self.obj_color = obj_color
+        # self.spec_highlight = spec_highlight
+        # self.phong_const = phong_const
 
 
 class Light(object):
-    def __init__(self, position, color, intensity):
+    def __init__(self, position, ambient_light, color, intensity):
         self.position = position
         self.color = color
         self.intensity = intensity
+        self.ambient = ambient_light
 
 
 def create_ray(camera, x_pixel, y_pixel):
@@ -260,18 +263,16 @@ def load_camera(clarity, at_line, from_line, up_line, angle_line):
     look_at = Vector3(float(at_line[1]), float(at_line[2]), float(at_line[3]))
     look_from = Vector3(float(from_line[1]), float(from_line[2]), float(from_line[3]))
     look_up = Vector3(float(up_line[1]), float(up_line[2]), float(up_line[3]))
+    angle = float(angle_line[1])*2.1786
 
-    camera = Camera(clarity, look_at, look_from, look_up)
+    camera = Camera(clarity, look_at, look_from, look_up, angle)
     # TODO: figure out what is wrong with the angle (it works better with 80)
-    camera.angle = float(angle_line[1])
-    camera.angle = 61
-    camera.look_at(look_at)
-    camera.calc()
     return camera
 
 
 # TODO: rename "Hit" to "Intersection"
 def check_for_intersection(ray, shape):
+    # TODO: check for shadows
     if shape.is_sphere():
         sphere = shape
         x_d, y_d, z_d = ray.direction.get_coords()
@@ -307,18 +308,18 @@ def check_for_intersection(ray, shape):
         distance = pow(undr_sqr, 0.5)
 
         if sphere.diffuse:
-            return Hit(distance, intersecting_point, normal, sphere.diffuse_color, sphere.spec_highlight, sphere.phong_const)
+            return Hit(distance, intersecting_point, normal, sphere)
         elif sphere.reflective:
-            return Hit(distance, intersecting_point, normal, sphere.reflective_color, sphere.spec_highlight, sphere.phong_const)
+            return Hit(distance, intersecting_point, normal, sphere)
 
     elif not shape.is_sphere():
         triangle = shape
-        u = add_vectors(triangle.second, vector_mult(triangle.first, -1))
-        v = add_vectors(triangle.third, vector_mult(triangle.first, -1))
+        u = subtract_vectors(triangle.second, triangle.first)
+        v = subtract_vectors(triangle.third, triangle.first)
         normal = u.cross(v)
         if normal.x == 0 and normal.y == 0 and normal.z == 0:
             return
-        w_o = add_vectors(ray.origin, vector_mult(triangle.second, -1))
+        w_o = subtract_vectors(ray.origin, triangle.second)
         a = -1 * normal.dot(w_o)
         b = normal.dot(ray.direction)
         if abs(b) < 0.0000001:
@@ -332,7 +333,7 @@ def check_for_intersection(ray, shape):
         uu = u.dot(u)
         uv = u.dot(v)
         vv = v.dot(v)
-        w = add_vectors(intersecting_point, vector_mult(triangle.first, -1))
+        w = subtract_vectors(intersecting_point, triangle.first)
         wu = w.dot(u)
         wv = w.dot(v)
         d = (uv * uv) - (uu * vv)
@@ -350,9 +351,9 @@ def check_for_intersection(ray, shape):
         distance = pow(undr_sqr, 0.5)
 
         if triangle.diffuse:
-            return Hit(distance, intersecting_point, normal, triangle.color, triangle.spec_highlight, triangle.phong_const)
+            return Hit(distance, intersecting_point, normal, triangle)
         elif triangle.reflective:
-            return Hit(distance, intersecting_point, normal, triangle.color, triangle.spec_highlight, triangle.phong_const)
+            return Hit(distance, intersecting_point, normal, triangle)
 
 
 def load_light_and_colors(direct_line, color_line, ambient_line, background_line):
@@ -370,13 +371,15 @@ def load_spheres(sphere_lines):
         center = Vector3(float(line[2]), float(line[3]), float(line[4]))
         radius = float(line[6])
         if line[8] == "Diffuse":
-            reflective_color = None
+            reflective_color = [255, 255, 255, 255]
             diffuse_color = [float(line[9])*255, float(line[10])*255, float(line[11])*255, 255]
+            spec_highlight = Vector3(float(line[13]), float(line[14]), float(line[15]))
+            phong_const = float(line[17])
         else:
             reflective_color = [float(line[9])*255, float(line[10])*255, float(line[11])*255, 255]
-            diffuse_color = None
-        spec_highlight = Vector3(float(line[13]), float(line[14]), float(line[15]))
-        phong_const = float(line[17])
+            diffuse_color = [255, 255, 255, 255]
+            spec_highlight = Vector3(255, 255, 255)
+            phong_const = 0
         spheres.append(Sphere(center, radius, reflective_color, diffuse_color, spec_highlight, phong_const))
     return spheres
 
@@ -388,23 +391,57 @@ def load_triangles(triangle_lines):
         second = Vector3(float(line[5]), float(line[6]), float(line[7]))
         third = Vector3(float(line[9]), float(line[10]), float(line[11]))
         if line[13] == "Diffuse":
-            reflective_color = None
+            reflective_color = [255, 255, 255, 255]
             diffuse_color = [float(line[14])*255, float(line[15])*255, float(line[16])*255, 255]
         else:
             reflective_color = [float(line[14])*255, float(line[15])*255, float(line[16])*255, 255]
-            diffuse_color = None
+            diffuse_color = [255, 255, 255, 255]
         spec_highlight = Vector3(float(line[18]), float(line[19]), float(line[20]))
         phong_const = float(line[22])
         triangles.append(Triangle(first, second, third, reflective_color, diffuse_color, spec_highlight, phong_const))
     return triangles
 
 
-def diffuse(hit, light):
-    color = hit.obj_color
-    new_color = [0, 0, 0, 255]
-    for i in xrange(3):
-        brightness = light.intensity * hit.normal.dot(subtract_vectors(light.position, hit.world_hit).normalize())
-        new_color[i] = new_color[i] + max(0, int(color[i] * brightness))
+def check_if_in_shadow():
+    # TODO: implement this check
+    return False
+
+
+def calculate_pixel_color(hit, light, camera):
+    color = hit.shape.color
+    is_in_shadow = check_if_in_shadow()
+    if is_in_shadow:
+        # TODO: change function if is_in_shadow
+        da_color = Vector3(0, 0, 0)
+    else:
+        # ###########
+        c_r = Vector3(hit.shape.diffuse_color[0], hit.shape.diffuse_color[1], hit.shape.diffuse_color[2])
+        c_a = light.ambient
+        c_l = Vector3(light.color[0], light.color[1], light.color[2])
+        ambient = multiply_vectors(c_r, c_a)
+        direct = multiply_vectors(c_r, vector_mult(c_l, max(0, hit.normal.dot(light.position))))
+
+        diffuse_term = add_vectors(ambient, direct)
+        # ###########
+        c_p = hit.shape.spec_highlight
+        specular = multiply_vectors(c_l, c_p)
+        reflective = vector_mult(hit.normal, 2)
+        reflective = vector_mult(reflective, hit.normal.dot(light.position))
+        reflective = subtract_vectors(reflective, light.position)
+
+        eye = subtract_vectors(camera.look_from, hit.intersection_point)
+        phong = max(0, pow(eye.dot(reflective), hit.shape.phong_const))
+        phong_term = vector_mult(specular, phong)
+        # ############
+        da_color = add_vectors(diffuse_term, phong_term)
+
+    if int(da_color.x) > 255:
+        da_color.x = 255
+    if int(da_color.y) > 255:
+        da_color.y = 255
+    if int(da_color.z) > 255:
+        da_color.z = 255
+    new_color = [int(da_color.x), int(da_color.y), int(da_color.z), 255]
     return new_color
 
 
@@ -423,7 +460,7 @@ def load_file_objects(input_file, image_size):
         lines[5].strip().split(" "),
         lines[6].strip().split(" ")
     )
-    light = Light(dir_to_light, light_color, 1)
+    light = Light(dir_to_light, ambient_light, light_color, 1)
 
     sphere_lines = []
     triangle_lines = []
@@ -461,7 +498,7 @@ def run(image, image_size):
                     elif hit.dist < closest_hit.dist:
                         closest_hit = hit
             if closest_hit:  # Image already filled with bg-color, only update if we hit a shape
-                color = diffuse(closest_hit, light)
+                color = calculate_pixel_color(closest_hit, light, camera)
                 ppm.point(row_index, column_index, color)
 
     # Create PNG
