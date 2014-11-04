@@ -169,7 +169,6 @@ class Sphere(object):
 
         self.diffuse_color = diffuse_color
         self.reflective_color = reflective_color
-#     TODO: write code that uses specular_highlight and phong_const
         self.spec_highlight = spec_highlight
         self.phong_const = phong_const
 
@@ -244,12 +243,10 @@ def load_camera(clarity, at_line, from_line, up_line, angle_line):
     angle = float(angle_line[1])*2.1786
 
     camera = Camera(clarity, look_at, look_from, look_up, angle)
-    # TODO: figure out what is wrong with the angle (it works better with 80)
     return camera
 
 
 def check_for_intersection(ray, shape):
-    # TODO: check for shadows
     if shape.is_sphere():
         sphere = shape
         x_d, y_d, z_d = ray.direction.get_coords()
@@ -429,7 +426,6 @@ def load_file_objects(input_file, image_size):
                          lines[1].strip().split(" "),
                          lines[2].strip().split(" "),
                          lines[3].strip().split(" "))
-    # TODO: figure out how to use ambient light
     dir_to_light, light_color, ambient_light, background_color = load_light_and_colors(
         lines[4].strip().split(" ")[:4],
         lines[4].strip().split(" ")[4:],
