@@ -119,15 +119,13 @@ class Vector3(object):
 class Camera(object):
     def __init__(self, clarity, l_at, l_from, l_up, angle):
         self.clarity = clarity
-        self.look_at_direction = l_at
-        self.look_from = l_from
+        self.look_at = l_at
+        self.look_from = subtract_vectors(l_from, self.look_at)
         self.look_up = l_up
-        self.g = Vector3(0, 0, -1)
         self.normal = 2
         self.angle = angle
         self.width = clarity
         self.height = clarity
-        self.w = None
         self.u = None
         self.v = None
         self.top = None
@@ -137,19 +135,12 @@ class Camera(object):
         self.calibrate()
 
     def calibrate(self):
-        self.w = Vector3(self.g.x * -1, self.g.y * -1, self.g.z * -1)
-        self.u = self.look_up.cross(self.w).normalize()
-        self.v = self.w.cross(self.u)
+        self.u = self.look_up.cross(self.look_from)
+        self.v = self.look_from.cross(self.u)
         self.top = abs(self.normal) * math.tan(math.radians(self.angle))
         self.bottom = -self.top
         self.right = self.top * self.width / self.height
         self.left = -self.right
-
-    def look_at(self, point):
-        direction = subtract_vectors(point, self.look_from)
-        self.g = Vector3(direction.x, direction.y, direction.z)
-        self.g.normalize()
-        self.calibrate()
 
 
 class Sphere(object):
@@ -226,8 +217,10 @@ class Light(object):
 def create_ray(camera, x_pixel, y_pixel):
     x_cam = camera.left + ((camera.right - camera.left) * (x_pixel) / camera.width)
     y_cam = camera.bottom + ((camera.top - camera.bottom) * (y_pixel) / camera.height)
-    result = add_vectors(Vector3(camera.w.x * -camera.normal, camera.w.y * -camera.normal, camera.w.z * -camera.normal),
-                         Vector3(camera.u.x * x_cam, camera.u.y * x_cam, camera.u.z * x_cam))
+    result = add_vectors(
+        vector_mult(camera.look_from, -camera.normal),
+        vector_mult(camera.u, x_cam)
+    )
     direction = add_vectors(result, Vector3(camera.v.x * y_cam, camera.v.y * y_cam, camera.v.z * y_cam))
     return Ray(camera.look_from, direction)
 
@@ -278,7 +271,7 @@ def check_for_intersection(ray, shape):
             undr_sqr *= -1
         distance = pow(undr_sqr, 0.5)
 
-        return Intersection(distance, intersecting_point, normal, sphere)
+        return Intersection(distance, intersecting_point, normal.normalize(), sphere)
 
     elif not shape.is_sphere():
         triangle = shape
@@ -470,4 +463,4 @@ def run(image, image_size):
     f.write(ppm.output())
     f.close()
 
-run(image="diffuse.rayTracing", image_size=513)
+run(image="diff.rayTracing", image_size=205)
