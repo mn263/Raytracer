@@ -1,6 +1,4 @@
 import math
-import struct
-import zlib
 
 
 def vector_mult(v1, mult_val):
@@ -30,7 +28,7 @@ class ppm(object):
     def __init__(self, height, width, background_color):
         self.height = height
         self.width = width
-        self.background_color = [int(x) for x in background_color]
+        self.background_color = background_color
         # create canvas
         self.canvas = []
         for row in range(height):
@@ -48,14 +46,14 @@ class ppm(object):
             return
         if not color:
             color = self.background_color
-        self.canvas[y][x] = [color[0], color[1], color[2]]
+        self.canvas[y][x] = [color.x, color.y, color.z]
 
     def output(self):
         output = "P3\n{} {}\n{}\n".format(len(self.canvas), len(self.canvas[0]), 255)
         for row in self.canvas:
             out_row = ""
             for column in row:
-                out_row = out_row + " " + str(column[0]) + " " + str(column[1]) + " " + str(column[2]) + " "
+                out_row = out_row + " " + str(int(column[0])) + " " + str(int(column[1])) + " " + str(int(column[2])) + " "
             output = "{}{}\n".format(output, out_row)
         return output
 
@@ -151,13 +149,15 @@ class Sphere(object):
             self.reflective = True
             self.diffuse = False
             self.color = reflective_color
-        if diffuse_color:
+            self.reflective_color = reflective_color
+            self.diffuse_color = Vector3(255, 255, 255)
+        elif diffuse_color:
             self.reflective = False
             self.diffuse = True
+            self.diffuse_color = diffuse_color
             self.color = diffuse_color
+            self.reflective_color = Vector3(255, 255, 255)
 
-        self.diffuse_color = diffuse_color
-        self.reflective_color = reflective_color
         self.spec_highlight = spec_highlight
         self.phong_const = phong_const
 
@@ -177,13 +177,15 @@ class Triangle(object):
             self.reflective = True
             self.diffuse = False
             self.color = reflective_color
+            self.reflective_color = reflective_color
+            self.diffuse_color = Vector3(255, 255, 255)
         if diffuse_color:
             self.reflective = False
             self.diffuse = True
             self.color = diffuse_color
+            self.diffuse_color = diffuse_color
+            self.reflective_color = Vector3(255, 255, 255)
 
-        self.diffuse_color = diffuse_color
-        self.reflective_color = reflective_color
         self.spec_highlight = spec_highlight
         self.phong_const = phong_const
 
@@ -207,11 +209,12 @@ class Intersection(object):  # A simple object representing a ray intersection w
 
 
 class Light(object):
-    def __init__(self, position, ambient_light, color, intensity):
+    def __init__(self, position, ambient_light, color, intensity, background_color):
         self.position = position
         self.color = color
         self.intensity = intensity
         self.ambient = ambient_light
+        self.background_color = background_color
 
 
 def create_ray(camera, x_pixel, y_pixel):
@@ -236,11 +239,13 @@ def load_camera(clarity, at_line, from_line, up_line, angle_line):
     return camera
 
 
-def check_for_intersection(ray, shape):
+def check_for_intersection(ray, shape, c):
     if shape.is_sphere():
         sphere = shape
-        x_d, y_d, z_d = ray.direction.get_coords()
         x_o, y_o, z_o = ray.origin.get_coords()
+        if c.look_from.z > 1:
+            x_o, y_o, z_o = ray.origin.normalize().get_coords()
+        x_d, y_d, z_d = ray.direction.normalize().get_coords()
         x_c, y_c, z_c = sphere.center.get_coords()
 
         b = 2 * ((x_d * x_o) - (x_d * x_c) + (y_d * y_o) - (y_d * y_c) + (z_d * z_o) - (z_d * z_c))
@@ -261,7 +266,9 @@ def check_for_intersection(ray, shape):
             if t0 < 0 < t1:
                 t = t1
             elif t0 > 0 and t1 > 0:
-                t = t1
+                t = t0
+        if not t:
+            return
 
         intersecting_point = add_vectors(ray.origin, vector_mult(ray.direction, t))
         x_i, y_i, z_i = intersecting_point.get_coords()
@@ -316,9 +323,9 @@ def check_for_intersection(ray, shape):
 
 def load_light_and_colors(direct_line, color_line, ambient_line, background_line):
     dir_to_light = Vector3(float(direct_line[1]), float(direct_line[2]), float(direct_line[3]))
-    light_color = [float(color_line[1]), float(color_line[2]), float(color_line[3])]
+    light_color = Vector3(float(color_line[1]), float(color_line[2]), float(color_line[3]))
     ambient_light = Vector3(float(ambient_line[1]), float(ambient_line[2]), float(ambient_line[3]))
-    background_color = [float(background_line[1])*255, float(background_line[2])*255, float(background_line[3])*255, 255]
+    background_color = Vector3(float(background_line[1])*255, float(background_line[2])*255, float(background_line[3])*255)
     return dir_to_light, light_color, ambient_light, background_color
 
 
@@ -329,13 +336,13 @@ def load_spheres(sphere_lines):
         center = Vector3(float(line[2]), float(line[3]), float(line[4]))
         radius = float(line[6])
         if line[8] == "Diffuse":
-            reflective_color = [255, 255, 255, 255]
-            diffuse_color = [float(line[9])*255, float(line[10])*255, float(line[11])*255, 255]
+            reflective_color = None
+            diffuse_color = Vector3(float(line[9])*255, float(line[10])*255, float(line[11])*255)
             spec_highlight = Vector3(float(line[13]), float(line[14]), float(line[15]))
             phong_const = float(line[17])
         else:
-            reflective_color = [float(line[9])*255, float(line[10])*255, float(line[11])*255, 255]
-            diffuse_color = [255, 255, 255, 255]
+            reflective_color = Vector3(float(line[9]), float(line[10]), float(line[11]))
+            diffuse_color = None
             spec_highlight = Vector3(255, 255, 255)
             phong_const = 0
         spheres.append(Sphere(center, radius, reflective_color, diffuse_color, spec_highlight, phong_const))
@@ -349,22 +356,21 @@ def load_triangles(triangle_lines):
         second = Vector3(float(line[5]), float(line[6]), float(line[7]))
         third = Vector3(float(line[9]), float(line[10]), float(line[11]))
         if line[13] == "Diffuse":
-            reflective_color = [255, 255, 255, 255]
-            diffuse_color = [float(line[14])*255, float(line[15])*255, float(line[16])*255, 255]
+            reflective_color = None
+            diffuse_color = Vector3(float(line[14])*255, float(line[15])*255, float(line[16])*255)
         else:
-            reflective_color = [float(line[14])*255, float(line[15])*255, float(line[16])*255, 255]
-            diffuse_color = [255, 255, 255, 255]
+            reflective_color = Vector3(float(line[14])*255, float(line[15])*255, float(line[16])*255)
+            diffuse_color = None
         spec_highlight = Vector3(float(line[18]), float(line[19]), float(line[20]))
         phong_const = float(line[22])
         triangles.append(Triangle(first, second, third, reflective_color, diffuse_color, spec_highlight, phong_const))
     return triangles
 
 
-def check_if_in_shadow(intersection, light, shapes):
-    direction = subtract_vectors(light.position, intersection.intersection_point)
-    ray = Ray(intersection.intersection_point, direction)
+def check_if_in_shadow(intersection, light, shapes, camera):
+    ray = Ray(intersection.intersection_point, light.position)
     for shape in shapes:
-        inter = check_for_intersection(ray, shape)
+        inter = check_for_intersection(ray, shape, camera)
         if inter:
             difference = subtract_vectors(intersection.intersection_point, inter.intersection_point)
             difference = abs(difference.x) + abs(difference.y) + abs(difference.z)
@@ -373,31 +379,50 @@ def check_if_in_shadow(intersection, light, shapes):
     return False
 
 
+def get_reflection(intersection, light, shapes, camera):
+    direction = subtract_vectors(intersection.normal, intersection.intersection_point)
+    ray = Ray(intersection.intersection_point, direction)
+    for shape in shapes:
+        inter = check_for_intersection(ray, shape, camera)
+        if inter:
+            difference = subtract_vectors(intersection.intersection_point, inter.intersection_point)
+            difference = abs(difference.x) + abs(difference.y) + abs(difference.z)
+            if difference > 0.00000000001:
+                return shape.diffuse_color
+    return light.background_color
+
+
 def calculate_pixel_color(intersection, light, camera, shapes):
-    is_in_shadow = check_if_in_shadow(intersection, light, shapes)
+    is_in_shadow = check_if_in_shadow(intersection, light, shapes, camera)
     if is_in_shadow:
         c_l = Vector3(0, 0, 0)
     else:
-        c_l = Vector3(light.color[0], light.color[1], light.color[2])
-    # ###########
-    c_r = Vector3(intersection.shape.diffuse_color[0], intersection.shape.diffuse_color[1], intersection.shape.diffuse_color[2])
-    c_a = light.ambient
-    ambient = multiply_vectors(c_r, c_a)
-    direct = multiply_vectors(c_r, vector_mult(c_l, max(0, intersection.normal.dot(light.position))))
+        c_l = Vector3(light.color.x, light.color.y, light.color.z)
 
-    diffuse_term = add_vectors(ambient, direct)
     # ###########
-    c_p = intersection.shape.spec_highlight
-    specular = multiply_vectors(c_l, c_p)
-    reflective = vector_mult(intersection.normal, 2)
-    reflective = vector_mult(reflective, intersection.normal.dot(light.position))
-    reflective = subtract_vectors(reflective, light.position)
+    if intersection.shape.reflective:
+        shp = intersection.shape
+        reflection_color = get_reflection(intersection, light, shapes, camera)
+        da_color = Vector3(reflection_color.x * shp.reflective_color.x, reflection_color.y * shp.reflective_color.y, reflection_color.z * shp.reflective_color.z)
+    else:
+        c_r = Vector3(intersection.shape.diffuse_color.x, intersection.shape.diffuse_color.y, intersection.shape.diffuse_color.z)
+        c_a = light.ambient
+        ambient = multiply_vectors(c_r, c_a)
+        direct = multiply_vectors(c_r, vector_mult(c_l, max(0, intersection.normal.dot(light.position))))
 
-    eye = subtract_vectors(camera.look_from, intersection.intersection_point)
-    phong = max(0, pow(eye.dot(reflective), intersection.shape.phong_const))
-    phong_term = vector_mult(specular, phong)
-    # ############
-    da_color = add_vectors(diffuse_term, phong_term)
+        diffuse_term = add_vectors(ambient, direct)
+        # ###########
+        c_p = intersection.shape.spec_highlight
+        specular = multiply_vectors(c_l, c_p)
+        reflective = vector_mult(intersection.normal, 2)
+        reflective = vector_mult(reflective, intersection.normal.dot(light.position))
+        reflective = subtract_vectors(reflective, light.position)
+
+        eye = subtract_vectors(camera.look_from, intersection.intersection_point)
+        phong = max(0, pow(eye.dot(reflective), intersection.shape.phong_const))
+        phong_term = vector_mult(specular, phong)
+        # ############
+        da_color = add_vectors(diffuse_term, phong_term)
 
     if int(da_color.x) > 255:
         da_color.x = 255
@@ -405,7 +430,7 @@ def calculate_pixel_color(intersection, light, camera, shapes):
         da_color.y = 255
     if int(da_color.z) > 255:
         da_color.z = 255
-    new_color = [int(da_color.x), int(da_color.y), int(da_color.z), 255]
+    new_color = Vector3(int(da_color.x), int(da_color.y), int(da_color.z))
     return new_color
 
 
@@ -423,7 +448,7 @@ def load_file_objects(input_file, image_size):
         lines[5].strip().split(" "),
         lines[6].strip().split(" ")
     )
-    light = Light(dir_to_light, ambient_light, light_color, 1)
+    light = Light(dir_to_light, ambient_light, light_color, 1, background_color)
 
     sphere_lines = []
     triangle_lines = []
@@ -454,7 +479,7 @@ def run(image, image_size):
             ray = create_ray(camera, row_index, camera.height - column_index)
             closest_intersection = None
             for shape in shapes:
-                intersection = check_for_intersection(ray, shape)
+                intersection = check_for_intersection(ray, shape, camera)
                 if intersection:
                     if not closest_intersection:
                         closest_intersection = intersection
@@ -469,4 +494,4 @@ def run(image, image_size):
     f.write(ppm.output())
     f.close()
 
-run(image="diffuse.rayTracing", image_size=205)
+run(image="my_scene.rayTracing", image_size=400)
