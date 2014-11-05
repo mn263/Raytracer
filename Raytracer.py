@@ -490,8 +490,8 @@ def run(image, image_size):
                 ppm.pixel(row_index, column_index, color)
 
     # Create PPM
-    f = open("scenell.ppm", "wb")
+    f = open("output.ppm", "wb")
     f.write(ppm.output())
     f.close()
 
-run(image="diff.rayTracing", image_size=1000)
+run(image="diffuse.rayTracing", image_size=1000)
