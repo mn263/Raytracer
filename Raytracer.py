@@ -124,7 +124,6 @@ class Camera(object):
         self.look_up = l_up
         self.g = Vector3(0, 0, -1)
         self.t = Vector3(0, 100, 0)
-        # TODO: fix some of the variables in camera
         self.normal = 2
         self.angle = angle
         self.width = clarity
@@ -226,11 +225,10 @@ class Light(object):
 
 
 def create_ray(camera, x_pixel, y_pixel):
-    x_cam = camera.left + ((camera.right - camera.left) * (x_pixel + 0.5) / camera.width)
-    y_cam = camera.bottom + ((camera.top - camera.bottom) * (y_pixel + 0.5) / camera.height)
+    x_cam = camera.left + ((camera.right - camera.left) * (x_pixel) / camera.width)
+    y_cam = camera.bottom + ((camera.top - camera.bottom) * (y_pixel) / camera.height)
     result = add_vectors(Vector3(camera.w.x * -camera.normal, camera.w.y * -camera.normal, camera.w.z * -camera.normal),
                          Vector3(camera.u.x * x_cam, camera.u.y * x_cam, camera.u.z * x_cam))
-
     direction = add_vectors(result, Vector3(camera.v.x * y_cam, camera.v.y * y_cam, camera.v.z * y_cam))
     return Ray(camera.look_from, direction)
 
@@ -281,10 +279,7 @@ def check_for_intersection(ray, shape):
             undr_sqr *= -1
         distance = pow(undr_sqr, 0.5)
 
-        if sphere.diffuse:
-            return Intersection(distance, intersecting_point, normal, sphere)
-        elif sphere.reflective:
-            return Intersection(distance, intersecting_point, normal, sphere)
+        return Intersection(distance, intersecting_point, normal, sphere)
 
     elif not shape.is_sphere():
         triangle = shape
@@ -324,10 +319,7 @@ def check_for_intersection(ray, shape):
             undr_sqr *= -1
         distance = pow(undr_sqr, 0.5)
 
-        if triangle.diffuse:
-            return Intersection(distance, intersecting_point, normal, triangle)
-        elif triangle.reflective:
-            return Intersection(distance, intersecting_point, normal, triangle)
+        return Intersection(distance, intersecting_point, normal.normalize(), triangle)
 
 
 def load_light_and_colors(direct_line, color_line, ambient_line, background_line):
@@ -376,13 +368,14 @@ def load_triangles(triangle_lines):
     return triangles
 
 
-def check_if_in_shadow():
+def check_if_in_shadow(intersection, light, camera, shapes):
+
     # TODO: implement this check
     return False
 
 
-def calculate_pixel_color(intersection, light, camera):
-    is_in_shadow = check_if_in_shadow()
+def calculate_pixel_color(intersection, light, camera, shapes):
+    is_in_shadow = check_if_in_shadow(intersection, light, camera, shapes)
     if is_in_shadow:
         # TODO: change function if is_in_shadow
         da_color = Vector3(0, 0, 0)
@@ -470,7 +463,7 @@ def run(image, image_size):
                     elif intersection.dist < closest_intersection.dist:
                         closest_intersection = intersection
             if closest_intersection:  # Image already filled with bg-color, only update if we intersection a shape
-                color = calculate_pixel_color(closest_intersection, light, camera)
+                color = calculate_pixel_color(closest_intersection, light, camera, shapes)
                 ppm.pixel(row_index, column_index, color)
 
     # Create PPM
