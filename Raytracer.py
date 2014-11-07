@@ -123,7 +123,6 @@ class Camera(object):
         self.look_from = l_from
         self.look_up = l_up
         self.g = Vector3(0, 0, -1)
-        self.t = Vector3(0, 100, 0)
         self.normal = 2
         self.angle = angle
         self.width = clarity
@@ -139,9 +138,9 @@ class Camera(object):
 
     def calibrate(self):
         self.w = Vector3(self.g.x * -1, self.g.y * -1, self.g.z * -1)
-        self.u = self.t.cross(self.w).normalize()
+        self.u = self.look_up.cross(self.w).normalize()
         self.v = self.w.cross(self.u)
-        self.top = abs(self.normal) * math.tan(math.radians(self.angle / 2))
+        self.top = abs(self.normal) * math.tan(math.radians(self.angle))
         self.bottom = -self.top
         self.right = self.top * self.width / self.height
         self.left = -self.right
@@ -238,7 +237,7 @@ def load_camera(clarity, at_line, from_line, up_line, angle_line):
     look_at = Vector3(float(at_line[1]), float(at_line[2]), float(at_line[3]))
     look_from = Vector3(float(from_line[1]), float(from_line[2]), float(from_line[3]))
     look_up = Vector3(float(up_line[1]), float(up_line[2]), float(up_line[3]))
-    angle = float(angle_line[1])*2.1786
+    angle = float(angle_line[1])
 
     camera = Camera(clarity, look_at, look_from, look_up, angle)
     return camera
